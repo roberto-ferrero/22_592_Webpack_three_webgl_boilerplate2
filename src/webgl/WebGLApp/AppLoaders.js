@@ -73,10 +73,5 @@ class AppLoaders{
     //----------------------------------------------
     // AUX:
 
-    init(){
-        
-    }
-
-  
 }
 export default AppLoaders

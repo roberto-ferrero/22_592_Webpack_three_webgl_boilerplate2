@@ -1,12 +1,12 @@
+//import gsap from "gsap"
 import * as dat from 'dat.gui';
 import * as THREE from "three"
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
-//import gsap from "gsap"
-//import {GLTFLoader, GLTLoader} from "three/examples/jsm/loaders/GLTFLoader"
 
 import Stage3D from "./Stage3D"
-import TextureLib from "../libs/TextureLib"
 import AppLoaders from './AppLoaders';
+
+const EventEmitter = require('events');
 
 class WebGLApp{
     constructor (obj){
@@ -23,10 +23,21 @@ class WebGLApp{
         this.responsiveScale = this.width/this.REF_RESOLUTION.width;
         this.cameraDistance = this.REF_CAMERA_DISTANCE*(this.height/this.REF_RESOLUTION.height)
         //----------------------
+        this.emitter = new EventEmitter()
+        this.emitter.setMaxListeners(2000)
+        this.clock = new THREE.Clock()
+        //----------------------
+        this.initialised = false
+        //----------------------
         // PARAMS:
         this.params = {}
         this.params.all_loaded = false
         this.params.init_asked = false
+        //--
+        this.params.show_backstage = false
+        this.params.use_camera_dev = false
+        //--
+        this.consts = {}
         //----------------------
         // LOADERS:
         this.loader = new AppLoaders({
@@ -34,6 +45,13 @@ class WebGLApp{
         })
         this.loader.emitter.on("onCompleted", ()=>{
             this._init()
+        })
+        this.emitter.on("onShowBackstage", (event)=>{
+            if(event.show){
+                this.cameraHelper.visible = true
+            }else{
+                this.cameraHelper.visible = false
+            }
         })
     }
 
@@ -43,6 +61,14 @@ class WebGLApp{
         console.log("(WebGLApp.init)!")
         this.params.init_asked = true
         this.loader.start()
+    }
+
+    get_activeCamera(){
+        if(this.params.use_camera_dev){
+            return this.camera_dev
+        }else{
+            return this.camera
+        }
     }
 
     //--------------------------------------------
@@ -56,7 +82,10 @@ class WebGLApp{
         this.__init_gui() 
         
         this._update_resize()
-        this._update_render()
+        this._update_RAF()
+
+        this.initialised = true
+        this.emitter.emit("onShowBackstage", {show:this.params.show_backstage})
     }
 
     _init_THREEJS(){
@@ -68,7 +97,8 @@ class WebGLApp{
         //----------------------
         // CAMERAS:
         this.camera = new THREE.PerspectiveCamera(70, this.width / this.height, 0.1, 6000 ); 
-
+        this.cameraHelper = new THREE.CameraHelper( this.camera );
+        this.scene.add( this.cameraHelper );
         //----------------------
         // RENDERER
         this.renderer = new THREE.WebGL1Renderer({
@@ -83,6 +113,11 @@ class WebGLApp{
         //this.renderer.toneMappingExposure = 1.25;
         //--
         this.$container.appendChild(this.renderer.domElement)
+        //--------
+        this.camera_dev = new THREE.PerspectiveCamera(70, this.width / this.height, 0.1, 20000 ); 
+        this.camera_dev.position.set(100, -189, 421)
+        this.camera_dev.lookAt(new THREE.Vector3(0, 0, 0))
+        this.controls = new OrbitControls(this.camera_dev, this.renderer.domElement)
 
         //--------
         /*
@@ -137,13 +172,13 @@ class WebGLApp{
         this.camera.updateProjectionMatrix();
         //--
     }
-    _update_render(){
-        //console.log("(WebGLApp._update_render)!")
+    _update_RAF(){
+        //console.log("(WebGLApp._update_RAF)!")
         if(this.height != this.$container.offsetHeight){
             this._update_resize()
         }
         this.renderer.render( this.scene, this.camera );
-        requestAnimationFrame(this._update_render.bind(this))
+        requestAnimationFrame(this._update_RAF.bind(this))
     }
     _update_mouse(e){
         this.mouse_position_norm.x = ((e.pageX/this.width)*2)-1;
@@ -165,25 +200,21 @@ class WebGLApp{
         this.gui = new dat.GUI({
             width: 300
         })
-        this.gui.params = {}
-        this.gui.params.use_camera_dev = false
-        this.gui.params.show_backstage = false
-
-        this.gui.add(this.gui.params, 'use_camera_dev').listen().onChange((value) => {
+        this.gui.add(this.params, 'use_camera_dev').listen().onChange((value) => {
             //console.log(this.params.use_camera_dev)
-            if(this.gui.params.use_camera_dev){
-                //this.show_backstage()
+            if(this.params.use_camera_dev){
+                this.emitter.emit("onUseCameraDev", {show:true})
             }else{
-                //this.hide_backstage()
+                this.emitter.emit("onUseCameraDev", {show:false})
             }
         });
 
-        this.gui.add(this.gui.params, 'show_backstage').listen().onChange((value) => {
+        this.gui.add(this.params, 'show_backstage').listen().onChange((value) => {
             //console.log(this.params.use_camera_dev)
-            if(this.gui.params.show_backstage){
-                //this.show_backstage()
+            if(this.params.show_backstage){
+                this.emitter.emit("onShowBackstage", {show:true})
             }else{
-                //this.hide_backstage()
+                this.emitter.emit("onShowBackstage", {show:false})
             }
         });
         /*
