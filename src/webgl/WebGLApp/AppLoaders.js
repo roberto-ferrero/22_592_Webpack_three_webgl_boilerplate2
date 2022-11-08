@@ -10,6 +10,7 @@ const EventEmitter = require('events');
 class AppLoaders{
     constructor (obj){
         console.log("(AppLoaders.CONSTRUCTORA): ", obj)
+        this.app = obj.app
         this.pathPrefix = obj.pathPrefix
         //--
         this.all_loaded = false
@@ -23,9 +24,9 @@ class AppLoaders{
         //----------------------
         // APP Assets to load:
         // Textures:
-        this.textureLib.addLoad("sample_texture", this.pathPrefix+"img/sample_7x4.jpg")
+        this.textureLib.addLoad("sample_texture", this.pathPrefix+"img/face1.jpg")
         // HDRs:
-        this.hdrLib.addLoad("sample_hdri_map", this.pathPrefix+"hdr/sample.hdr")
+        //this.hdrLib.addLoad("sample_hdri_map", this.pathPrefix+"hdr/sample.hdr")
         // GLTFs:
         this.gltfLib.addLoad("sample_gltf", this.pathPrefix+"glbs/sample.glb", true)
     }
@@ -35,6 +36,15 @@ class AppLoaders{
         this.textureLib.start()
         this.hdrLib.start()
         this.gltfLib.start()
+    }
+    get_texture(itemId){
+        return this.textureLib.get(itemId)
+    }
+    get_gltf(itemId){
+        return this.gltfLib.get(itemId)
+    }
+    get_hdr(itemId){
+        return this.hdrLib.get(itemId)
     }
     //----------------------------------------------
     // EVENTS:
@@ -66,6 +76,7 @@ class AppLoaders{
 
     _eval_all_loaded(){
         if(this.textureLib.all_loaded && this.hdrLib.all_loaded && this.gltfLib.all_loaded){
+            console.log("(AppLoaders._eval_all_loaded): onCompleted!")
             this.all_loaded = true
             this.emitter.emit("onCompleted")
         }

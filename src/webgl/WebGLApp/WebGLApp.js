@@ -3,8 +3,9 @@ import * as dat from 'dat.gui';
 import * as THREE from "three"
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 
-import Stage3D from "./Stage3D"
+import AppStage from "./AppStage"
 import AppLoaders from './AppLoaders';
+import AppTripod from './AppTripod';
 
 const EventEmitter = require('events');
 
@@ -27,13 +28,13 @@ class WebGLApp{
         this.emitter.setMaxListeners(2000)
         this.clock = new THREE.Clock()
         //----------------------
+        // PUBLIC PARAMS:
         this.initialised = false
+        this.init_asked = false
+        this.all_loaded = false
+        this.scrollProgress = 0
         //----------------------
-        // PARAMS:
         this.params = {}
-        this.params.all_loaded = false
-        this.params.init_asked = false
-        //--
         this.params.show_backstage = false
         this.params.use_camera_dev = false
         //--
@@ -44,6 +45,7 @@ class WebGLApp{
             pathPrefix: this.pathPrefix
         })
         this.loader.emitter.on("onCompleted", ()=>{
+            this.all_loaded = true
             this._init()
         })
         this.emitter.on("onShowBackstage", (event)=>{
@@ -59,8 +61,29 @@ class WebGLApp{
     // PUBLIC:
     init(){
         console.log("(WebGLApp.init)!")
-        this.params.init_asked = true
+        this.init_asked = true
         this.loader.start()
+    }
+    
+    resize(resize_data){
+        console.log("(WebGLApp.resize): ",resize_data )
+        this._update_resize()
+        this.stage.update_resize()
+        this.tripod.update_resize()
+        //--
+        if(this.params.mobileMode && !resize_data.mobileMode){
+            this.params.mobileMode = resize_data.mobileMode
+            //console.log("PASAMOS A MODO DESKTOP!")
+            this.emitter.emit("onMobileModeChanged")
+        }else if(!this.params.mobileMode && resize_data.mobileMode){
+            this.params.mobileMode = resize_data.mobileMode
+            //console.log("PASAMOS A MODO MOBILE!")
+            this.emitter.emit("onMobileModeChanged")
+        }
+    }
+
+    update_scrollProgress(value){
+        this.scrollProgress = value
     }
 
     get_activeCamera(){
@@ -76,14 +99,14 @@ class WebGLApp{
     _init(){
         console.log("(WebGLApp._init)!")
         this._init_THREEJS()
-        this._init_stage3D()
+        this._init_stage()
         this._init_DOM_events()
-
+        
         this.__init_gui() 
         
         this._update_resize()
         this._update_RAF()
-
+        
         this.initialised = true
         this.emitter.emit("onShowBackstage", {show:this.params.show_backstage})
     }
@@ -97,8 +120,14 @@ class WebGLApp{
         //----------------------
         // CAMERAS:
         this.camera = new THREE.PerspectiveCamera(70, this.width / this.height, 0.1, 6000 ); 
+        this.scene.add( this.camera );
         this.cameraHelper = new THREE.CameraHelper( this.camera );
         this.scene.add( this.cameraHelper );
+        //--
+        this.tripod = new AppTripod({
+            app:this,
+            camera_holder:this.camera
+        }) 
         //----------------------
         // RENDERER
         this.renderer = new THREE.WebGL1Renderer({
@@ -128,8 +157,8 @@ class WebGLApp{
         */
     }
 
-    _init_stage3D(){
-        this.stage3D = new Stage3D({
+    _init_stage(){
+        this.stage = new AppStage({
             app: this
         })
     }
