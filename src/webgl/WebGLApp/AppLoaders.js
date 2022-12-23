@@ -1,9 +1,9 @@
 //import gsap from "gsap"
 //import * as THREE from 'three'
 
-import TextureLib from "../libs/TextureLib"
-import HDRLib from "../libs/HDRLib"
-import GLTFLib from "../libs/GLTFLib"
+import TextureLib from "../core/libs/TextureLib"
+import HDRLib from "../core/libs/HDRLib"
+import GLTFLib from "../core/libs/GLTFLib"
 
 const EventEmitter = require('events');
 

@@ -5,7 +5,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 
 import AppStage from "./AppStage"
 import AppLoaders from './AppLoaders';
-import AppTripod from './AppTripod';
+import AppCamera from './AppCamera';
 
 const EventEmitter = require('events');
 
@@ -13,8 +13,10 @@ class WebGLApp{
     constructor (obj){
         console.log("(WebGLApp.CONSTRUCTORA): ", obj)
         //--
+        this.$el = obj.$el
         this.$container = obj.$container
         this.pathPrefix = obj.pathPrefix
+        this.data = obj.data
         //----------------------
         // DIMENSIONS:
         this.REF_RESOLUTION = {width:1920, height:947};
@@ -30,15 +32,23 @@ class WebGLApp{
         //----------------------
         // PUBLIC PARAMS:
         this.initialised = false
+        this.active = true
+        this.isMouseover = false
+        this.mobileMode = this.data.mobileMode
+
         this.init_asked = false
         this.all_loaded = false
-        this.scrollProgress = 0
+        //---
+        this.scroll_progress = 0
+        this.scroll_progress_last = 0
+        this.scroll_progress_delta = 0 // -1, +1
+        this.scroll_offsetY = 0
         //----------------------
-        this.params = {}
-        this.params.show_backstage = false
-        this.params.use_camera_dev = false
-        //--
-        this.consts = {}
+        // DEV PARAMS:
+        this.show_backstage = false
+        this.use_camera_dev = false
+        //---------------------
+        this.mouse_position_norm = new THREE.Vector2()
         //----------------------
         // LOADERS:
         this.loader = new AppLoaders({
@@ -49,11 +59,7 @@ class WebGLApp{
             this._init()
         })
         this.emitter.on("onShowBackstage", (event)=>{
-            if(event.show){
-                this.cameraHelper.visible = true
-            }else{
-                this.cameraHelper.visible = false
-            }
+            this.cameraHelper.visible = this.show_backstage
         })
     }
 
@@ -63,6 +69,48 @@ class WebGLApp{
         console.log("(WebGLApp.init)!")
         this.init_asked = true
         this.loader.start()
+    }
+
+    kill(){
+        document.removeEventListener('keydown', this.listener_keypress)
+        this.$container.removeEventListener('mousemove', this.listener_mousemove, false)
+        this.$container.removeEventListener('mouseover', this.listener_mouseover, false)
+        this.$container.removeEventListener('mouseout', this.listener_mouseout, false)
+        window.removeEventListener('resize', this.listener_resize, false)
+
+        cancelAnimationFrame(this.raf_request)
+
+        this.emitter.emit("onKillApp")
+        this.emitter.removeAllListeners()
+    }
+
+    activate(){
+        if(!this.active){
+            //console.log("(LogoGridApp.activate)!")
+            this.active = true
+            this.emitter.emit("onActivateApp", {})
+        }
+    }
+    deactivate(){
+        if(this.active){
+            //console.log("(LogoGridApp.deactivate)!")
+            this.active = false
+            this.emitter.emit("onDeactivateApp", {})
+        }
+    }
+
+
+    set_isMouseover(value){
+        if(this.isMouseover != value){
+            this.isMouseover = value
+            if(this.isMouseover){
+                //console.log("isMouseover = TRUE")
+                this.emitter.emit("onMouseoverApp", {})
+            }else{
+                //console.log("isMouseover = FALSE")
+                this.emitter.emit("onMouseoutApp", {})
+            }
+        }
     }
     
     resize(resize_data){
@@ -82,12 +130,30 @@ class WebGLApp{
         }
     }
 
-    update_scrollProgress(value){
-        this.scrollProgress = value
-    }
+    update_scroll_progress(value, offsetY){
+        // console.log("(GoldenFaceApp.update_scroll_progress): ",value)
+         this.scroll_progress_last = this.scroll_progress
+         this.scroll_progress = value
+         //--
+         // console.log("--");
+         // console.log("this.scroll_progress_last: "+this.scroll_progress_last);
+         // console.log("this.scroll_progress: "+this.scroll_progress);
+         //--
+         if(this.scroll_progress_last < this.scroll_progress){
+             this.scroll_progress_delta = 1
+         }else if(this.scroll_progress_last > this.scroll_progress){
+             this.scroll_progress_delta = -1
+         }else{
+             this.scroll_progress_delta = 0
+         }
+         this.scroll_offsetY = offsetY
+         //--
+         // console.log("this.scroll_progress_delta: "+this.scroll_progress_delta);
+         this.emitter.emit("onScrollProgressUpdate", {scroll_progress:this.scroll_progress})
+     }
 
     get_activeCamera(){
-        if(this.params.use_camera_dev){
+        if(this.use_camera_dev){
             return this.camera_dev
         }else{
             return this.camera
@@ -108,14 +174,14 @@ class WebGLApp{
         this._update_RAF()
         
         this.initialised = true
-        this.emitter.emit("onShowBackstage", {show:this.params.show_backstage})
+        this.emitter.emit("onShowBackstage", {show:this.show_backstage})
     }
 
     _init_THREEJS(){
          //----------------------
         // SCENE:
         this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x151515)
+        //this.scene.background = new THREE.Color(0x151515)
         
         //----------------------
         // CAMERAS:
@@ -124,7 +190,7 @@ class WebGLApp{
         this.cameraHelper = new THREE.CameraHelper( this.camera );
         this.scene.add( this.cameraHelper );
         //--
-        this.tripod = new AppTripod({
+        this.appCamera = new AppCamera({
             app:this,
             camera_holder:this.camera
         }) 
@@ -143,18 +209,11 @@ class WebGLApp{
         //--
         this.$container.appendChild(this.renderer.domElement)
         //--------
-        this.camera_dev = new THREE.PerspectiveCamera(70, this.width / this.height, 0.1, 20000 ); 
+        this.camera_dev = new THREE.PerspectiveCamera(70, this.width / this.height, 0.1, 90000 ); 
         this.camera_dev.position.set(100, -189, 421)
         this.camera_dev.lookAt(new THREE.Vector3(0, 0, 0))
         this.controls = new OrbitControls(this.camera_dev, this.renderer.domElement)
 
-        //--------
-        /*
-        this.camera_dev = new THREE.PerspectiveCamera(70, this.width / this.height, 0.1, 20000 ); 
-        this.camera_dev.position.set(3000, 2000, 1000)
-        this.camera_dev.lookAt(new THREE.Vector3(0, 0, 0))
-        this.controls = new OrbitControls(this.camera_dev, this.renderer.domElement)
-        */
     }
 
     _init_stage(){
@@ -166,23 +225,22 @@ class WebGLApp{
     _init_DOM_events(){
         //----------------------
         // RESIZE EVENT:
-        window.addEventListener('resize', ()=>{
+        window.addEventListener('resize', this.listener_resize = ()=>{
             this._update_resize()
         })
         this._update_resize()
         //----------------------
-        
-        //this.this.mouse_position_norm_px = new THREE.Vector2(1, 1)   // Distancia en px al centro
-        this.mouse_position_norm = new THREE.Vector2()
-        document.addEventListener('mousemove',(self) =>{
+        this.$container.addEventListener('mouseover', this.listener_mouseover = (self) =>{
+            // console.log("mouseover");
+            this.set_isMouseover(true)
+        }, false);
+        this.$container.addEventListener('mouseout', this.listener_mouseout = (self) =>{
+            //console.log("mouseout");
+            this.set_isMouseover(false)
+        }, false);
+        this.$container.addEventListener('mousemove', this.listener_mousemove = (self) =>{
             this._update_mouse(self)
         }, false);
-
-
-        //------------------------
-        document.addEventListener('keypress', (event) => {
-            this._keypress(event.code)
-        });
     }
 
     //--------------------
@@ -200,22 +258,30 @@ class WebGLApp{
         this.camera.fov = 2*Math.atan((this.height/2)/(this.cameraDistance)) * (180/Math.PI) 
         this.camera.updateProjectionMatrix();
         //--
+        this.emitter.emit("onResize")
     }
     _update_RAF(){
-        //console.log("(WebGLApp._update_RAF)!")
+        this.raf_request = requestAnimationFrame(this._update_RAF.bind(this))
+        if(!this.active){
+            return
+        }
+        //----
         if(this.height != this.$container.offsetHeight){
             this._update_resize()
         }
-        this.renderer.render( this.scene, this.camera );
-        requestAnimationFrame(this._update_RAF.bind(this))
+        //--
+        this.emitter.emit("onUpdate")
+        this.stage.update_RAF()
+        //--
+        this.renderer.render( this.scene, this.get_activeCamera());
     }
     _update_mouse(e){
-        this.mouse_position_norm.x = ((e.pageX/this.width)*2)-1;
-        this.mouse_position_norm.y = -((e.pageY/this.height)*2)+1;
+        const container_rect = this.$container.getBoundingClientRect()
+        const rel_mouse_posX = e.clientX-container_rect.x
+        const rel_mouse_posY = e.clientY-container_rect.y
         //--
-        //this.mouse_position_norm_px.x = e.pageX-(e.pageX*0.5)
-        //this.mouse_position_norm_px.y = -e.pageY+(e.pageY*0.5)
-        //console.log(this.mouse_position_norm_px)
+        this.mouse_position_norm.x = ((rel_mouse_posX/this.width)*2)-1;
+        this.mouse_position_norm.y = -((rel_mouse_posY/this.height)*2)+1;
     }
     _keypress(code){
         if(code == "KeyA"){
@@ -225,50 +291,35 @@ class WebGLApp{
     
     //--------------------------------------------
     // AUX:
+    __clamp(num, min, max){
+        return Math.min(Math.max(num, min), max)
+    }
     __init_gui(){
+        this.gui_obj ={
+            scroll_progress: 0,
+            call_func: () =>{
+                //console.log("launch_glitter!")
+                //this.emitter.emit("on_print_generator_points")
+            }
+        }
         this.gui = new dat.GUI({
             width: 300
         })
-        this.gui.add(this.params, 'use_camera_dev').listen().onChange((value) => {
-            //console.log(this.params.use_camera_dev)
-            if(this.params.use_camera_dev){
-                this.emitter.emit("onUseCameraDev", {show:true})
-            }else{
-                this.emitter.emit("onUseCameraDev", {show:false})
-            }
+        this.gui.add(this, 'use_camera_dev').listen().onChange((value) => {
+            //console.log(this.use_camera_dev)
+            this.emitter.emit("onUseCameraDev", {show:this.use_camera_dev})
         });
 
-        this.gui.add(this.params, 'show_backstage').listen().onChange((value) => {
-            //console.log(this.params.use_camera_dev)
-            if(this.params.show_backstage){
-                this.emitter.emit("onShowBackstage", {show:true})
-            }else{
-                this.emitter.emit("onShowBackstage", {show:false})
-            }
+        this.gui.add(this, 'show_backstage').listen().onChange((value) => {
+            this.emitter.emit("onShowBackstage", {show:this.show_backstage})
         });
-        /*
-        this.gui.params.image_01_scale = 1
-        this.gui.params.image_02_scale = 1
-        this.gui.params.image_03_scale = 1
-        this.gui.params.image_0a_plane_z = 0
-        this.gui.params.image_0b_plane_z = 0
+
+        this.gui.add(this.gui_obj, 'scroll_progress', 0, 1, 0.001).onChange((value) => {
+            //console.log("(FaceGlitterApp.scroll_progress): "+value)
+            this.update_scroll_progress(value)
+        });
         //--
-        this.gui.add(this.gui.params, 'image_01_scale', 0, 10).onChange( (value) => {
-            this.emitter.emit("onScaleItem", {itemId:"image01", value:value})
-        });
-        this.gui.add(this.gui.params, 'image_02_scale', 0, 10).onChange( (value) => {
-            this.emitter.emit("onScaleItem", {itemId:"image02", value:value})
-        });
-        this.gui.add(this.gui.params, 'image_03_scale', 0, 10).onChange( (value) => {
-            this.emitter.emit("onScaleItem", {itemId:"image03", value:value})
-        });
-        this.gui.add(this.gui.params, 'image_0a_plane_z', -1000, 1000).onChange( (value) => {
-            this.emitter.emit("onRepositionPlaneZ", {itemId:"sample0a", value:value})
-        });
-        this.gui.add(this.gui.params, 'image_0b_plane_z', -1000, 1000).onChange( (value) => {
-            this.emitter.emit("onRepositionPlaneZ", {itemId:"sample0b", value:value})
-        });
-        */
+        this.gui.add(this.gui_obj, 'call_func');
         //--    
 		this.gui.open();
     }

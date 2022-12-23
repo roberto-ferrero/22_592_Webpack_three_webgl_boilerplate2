@@ -1,9 +1,9 @@
 //import gsap from "gsap"
 //import * as THREE from 'three'
 
-class AppTripod{
+class AppCamera{
     constructor (obj){
-        console.log("(AppTripod.CONSTRUCTORA): ", obj)
+        console.log("(AppCamera.CONSTRUCTORA): ", obj)
         this.app = obj.app
         this.camera_holder = obj.camera_holder
         //--
@@ -40,4 +40,4 @@ class AppTripod{
     // AUX:
   
 }
-export default AppTripod
+export default AppCamera

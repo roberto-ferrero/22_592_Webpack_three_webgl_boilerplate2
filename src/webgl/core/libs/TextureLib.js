@@ -1,5 +1,5 @@
 import * as THREE from "three"
-import Datos from "../core/Datos"
+import Datos from "../Datos"
 
 const EventEmitter = require('events');
 
@@ -27,14 +27,35 @@ class TextureLib{
             for(let i=0; i<this.data.arrayItems.length; i++){
                 const itemId = this.data.arrayItems[i]
                 const item = this.data.getItemAt(i)
-                item.texture = this.textureLoader.load(item.path, (response)=>{this.itemsLoaded++})
+                item.texture = this.textureLoader.load(
+                    item.path,
+                    (response)=>{
+                        //console.log("loaded: ", response)
+                        this.itemsLoaded++
+                    },
+                    undefined,
+                    ( err ) =>{
+                        // onError callback
+                        console.error( 'An error happened: '+itemId+" - "+item.path, err );
+                    }
+                )
+                /*
+                https://discourse.threejs.org/t/warning-from-threejs-image-is-not-power-of-two/7085
+                This warning is only logged when using WebGL1 since you need power-of-two (POT) textures for mipmapping. There are a few options to avoid this message. You can disable mipmapping by:
+
+                Set Texture.minFilter to THREE.LinearFilter
+                Set Texture.generateMipmaps to false
+                You can also use a WebGL 2 rendering context. Or you just ensure your image is POT.
+                */
+                item.texture.minFilter  = THREE.LinearFilter
+                item.texture.generateMipmaps = false
             }
         }else{
             this._completed()
         }
     }
     addLoad(itemId, path){
-        //console.log("(TextureLib.addLoad)!")
+        //console.log("(TextureLib.addLoad) "+itemId+": ", path)
         const item = {}
         item.id = itemId
         item.path = path
@@ -43,9 +64,11 @@ class TextureLib{
         this.data.nuevoItem(item.id, item)
     }
     get(itemId){
+        //console.log("(TextureLib.get): ", this.data.getItem(itemId))
         return this.data.getItem(itemId).texture
     }
     get_dimensions(itemId){
+        //console.log("(TextureLib.get_dimensions): ", this.get(itemId).image)
         const obj ={
             width: this.get(itemId).image.width,
             height: this.get(itemId).image.height

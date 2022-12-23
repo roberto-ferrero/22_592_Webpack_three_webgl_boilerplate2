@@ -1,5 +1,5 @@
 import * as THREE from "three"
-import Datos from "../core/Datos"
+import Datos from "../Datos"
 import {RGBELoader} from "three/examples/jsm/loaders/RGBELoader"
 
 const EventEmitter = require('events');

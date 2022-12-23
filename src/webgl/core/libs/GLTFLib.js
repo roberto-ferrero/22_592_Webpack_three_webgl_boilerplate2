@@ -4,7 +4,7 @@ import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js'
 
 const EventEmitter = require('events');
 
-import Datos from "../core/Datos"
+import Datos from "../Datos"
 
 class GLTFLib{
     constructor (obj){
